@@ -1,7 +1,5 @@
 // ============================================================
 //  firebase.js  –  Firestore integration
-//  Replace the firebaseConfig object with your actual project
-//  credentials from the Firebase Console.
 // ============================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -16,10 +14,10 @@ import {
   getDocs,
   orderBy,
   limit,
+  writeBatch,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ── ✏️  PASTE YOUR FIREBASE CONFIG HERE ──────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyDrbdjppWzTiDaWiAagO0cha2sX_hthXXw",
   authDomain: "csnight-e86c7.firebaseapp.com",
@@ -29,34 +27,24 @@ const firebaseConfig = {
   appId: "1:697686912207:web:e4a5deea7a5108ed48dbba",
 };
 
-// ─────────────────────────────────────────────────────────────
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 /**
- * Firestore document shape (doc ID = userID e.g. "0001"):
+ * Firestore document shape (doc ID = zero-padded # e.g. "0001"):
  * {
  *   name:                "Abela, Niño, S",
  *   paymentStatus:       "Installment – Completed",
  *   dietaryRestrictions: "Seafood Allergy",
- *   cipherText:          "MNQXM, ZUAA, E",
- *   searchKey:           "MNQXM, ZUAA, E"   ← same as cipherText, uppercased
+ *   hash:                "f129323c1e3a61794860beed385c025c",  ← MD5
  * }
- *
- * QR codes encode the cipherText value directly.
- * Scanning decodes it back to the name via Caesar cipher (shift 12).
- * Lookup is done by matching the raw scanned value against searchKey.
+ * searchKey == hash (exact match, lowercase)
  */
 
-/**
- * Fetch a guest by the raw scanned cipher text.
- * This is the primary lookup — O(1) Firestore query.
- */
-export async function fetchGuestByCipher(cipherText) {
-  const key = cipherText.trim().toUpperCase();
-
-  const q = query(collection(db, "guests"), where("searchKey", "==", key));
+/** Fetch a guest by their MD5 hash (scanned from QR code). */
+export async function fetchGuestByCipher(hash) {
+  const key = hash.trim().toLowerCase();
+  const q = query(collection(db, "guests"), where("hash", "==", key));
   const snap = await getDocs(q);
   if (!snap.empty) {
     const d = snap.docs[0];
@@ -65,27 +53,10 @@ export async function fetchGuestByCipher(cipherText) {
   return null;
 }
 
-/**
- * Keep fetchGuestByName as an alias so scanner.js needs no changes.
- * decodedName is unused — we re-use the raw cipher passed via closure in scanner.js.
- * (scanner.js passes the raw QR value to handleScan; we shadow it here.)
- */
-export async function fetchGuestByName(decodedName) {
-  // decodedName is the Caesar-decoded string. We can't reverse-lookup by it
-  // efficiently, so fall back to a full scan and match on the name field.
-  const nameKey = decodedName.trim().toUpperCase();
-
-  const allSnap = await getDocs(collection(db, "guests"));
-  const found = allSnap.docs.find((d) => {
-    return (d.data().name ?? "").toUpperCase() === nameKey;
-  });
-  return found ? { docId: found.id, ...found.data() } : null;
-}
-
-/** Fetch a guest by Firestore document ID (userID, e.g. "0001"). */
-export async function fetchGuestById(guestId) {
-  const id = String(guestId).padStart(4, "0");
-  const ref = doc(db, "guests", id);
+/** Fetch a guest by Firestore document ID (zero-padded #, e.g. "0001"). */
+export async function fetchGuestById(id) {
+  const padded = String(id).padStart(4, "0");
+  const ref = doc(db, "guests", padded);
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
   return { docId: snap.id, ...snap.data() };

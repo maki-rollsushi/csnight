@@ -1,42 +1,49 @@
 // ============================================================
-//  cipher.js  –  Caesar cipher encode / decode
-//  Shift is fixed at 12. Only shifts A–Z letters.
-//  Numbers, punctuation, spaces, and accented characters
-//  (e.g. Ñ) pass through unchanged.
+//  cipher.js  –  MD5 hash (one-way)
+//  The hash is stored in Firestore and matched on scan.
+//  decode() returns the hash itself — the real name comes
+//  from the Firestore document after lookup.
 // ============================================================
 
-export const CAESAR_SHIFT = 12;
-
-function shiftChar(ch, shift) {
-  const isUpper = ch >= "A" && ch <= "Z";
-  const isLower = ch >= "a" && ch <= "z";
-  if (!isUpper && !isLower) return ch;
-  const base = isUpper ? 65 : 97;
-  return String.fromCharCode(
-    ((ch.charCodeAt(0) - base + shift + 26) % 26) + base,
-  );
-}
-
 /**
- * Encode a plaintext name into a cipher string.
- * Input is uppercased before shifting so the QR value
- * is always uppercase.
+ * encode() is only used by the QR generator, not the web app.
+ * Kept here for reference — actual MD5 is generated in Python.
  */
 export function encode(name) {
-  return name
-    .toUpperCase()
-    .split("")
-    .map((ch) => shiftChar(ch, CAESAR_SHIFT))
-    .join("");
+  // MD5 is generated server-side in Python (hashlib.md5)
+  // This is a no-op placeholder in the browser app.
+  return name;
 }
 
 /**
- * Decode a cipher string back to the original name (uppercase).
+ * For MD5, there is no decode — return the raw hash.
+ * The scanner uses this only for the toast/modal before
+ * the Firestore lookup resolves the real name.
  */
-export function decode(cipher) {
-  return cipher
-    .toUpperCase()
-    .split("")
-    .map((ch) => shiftChar(ch, -CAESAR_SHIFT))
-    .join("");
+export function decode(hash) {
+  return hash; // real name resolved via Firestore lookup
+} // ============================================================
+//  cipher.js  –  MD5 hash (one-way)
+//  The hash is stored in Firestore and matched on scan.
+//  decode() returns the hash itself — the real name comes
+//  from the Firestore document after lookup.
+// ============================================================
+
+/**
+ * encode() is only used by the QR generator, not the web app.
+ * Kept here for reference — actual MD5 is generated in Python.
+ */
+export function encode(name) {
+  // MD5 is generated server-side in Python (hashlib.md5)
+  // This is a no-op placeholder in the browser app.
+  return name;
+}
+
+/**
+ * For MD5, there is no decode — return the raw hash.
+ * The scanner uses this only for the toast/modal before
+ * the Firestore lookup resolves the real name.
+ */
+export function decode(hash) {
+  return hash; // real name resolved via Firestore lookup
 }

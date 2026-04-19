@@ -1,6 +1,5 @@
 // ============================================================
-//  scanner.js  –  QR scanning + Caesar decode + modal + log
-//  Caesar shift is fixed at 12 (see cipher.js)
+//  scanner.js  –  QR scanning + Base64 decode + modal + log
 // ============================================================
 
 import {
@@ -10,7 +9,7 @@ import {
   getLastAction,
   countInside,
 } from "./firebase.js";
-import { decode, CAESAR_SHIFT } from "./cipher.js";
+// cipher.js not needed for MD5 — hashes are matched directly in Firestore
 
 // ── State ─────────────────────────────────────────────────────
 let totalScans = 0;
@@ -18,6 +17,8 @@ let insideCount = 0;
 let scanning = true;
 const SUITS = ["♠", "♥", "♦", "♣"];
 let html5QrCode = null;
+let availableCameras = [];
+let currentCamIndex = 0;
 
 // ── Helpers ───────────────────────────────────────────────────
 function randomSuit() {
@@ -62,7 +63,7 @@ function appendLog(guest, action, ts, cipherText) {
     <span class="log-suit">${randomSuit()}</span>
     <div class="log-info">
       <span class="log-name">${guest.name}</span>
-      <span class="log-id">cipher: ${cipherText}</span>
+      <span class="log-id">id: ${guest.docId}</span>
     </div>
     <div class="log-right">
       <span class="log-action-badge ${action}">${action === "enter" ? "▶ IN" : "◀ OUT"}</span>
@@ -76,7 +77,7 @@ function appendLog(guest, action, ts, cipherText) {
 function openModal(guest, action, ts, cipherText, decodedName) {
   document.getElementById("modal-suit-icon").textContent = randomSuit();
   document.getElementById("modal-name").textContent = guest.name;
-  document.getElementById("modal-id").textContent = `Cipher: ${cipherText}`;
+  document.getElementById("modal-id").textContent = `ID: ${guest.docId}`;
   document.getElementById("modal-decoded").textContent = `→ ${decodedName}`;
   document.getElementById("modal-payment").textContent =
     guest.paymentStatus ?? "—";
@@ -114,23 +115,16 @@ async function handleScan(rawValue) {
     return;
   }
 
-  const decodedName = decode(cipherText);
-  showToast(`Decoding: ${decodedName}…`, "info");
+  showToast(`Looking up guest…`, "info");
 
   try {
     const isNumeric = /^\d+$/.test(cipherText);
-
-    // Numeric input → direct doc ID lookup (userID like "0001")
-    // Otherwise → match by cipherText/searchKey (primary) or decoded name (fallback)
-    let guest;
-    if (isNumeric) {
-      guest = await fetchGuestById(cipherText);
-    } else {
-      guest = await fetchGuestByCipher(cipherText);
-    }
+    let guest = isNumeric
+      ? await fetchGuestById(cipherText)
+      : await fetchGuestByCipher(cipherText);
 
     if (!guest) {
-      showToast(`No guest found for "${decodedName}"`, "error");
+      showToast(`No guest found`, "error");
       scanning = true;
       return;
     }
@@ -143,10 +137,9 @@ async function handleScan(rawValue) {
 
     const now = new Date();
     appendLog(guest, action, now, cipherText);
-    openModal(guest, action, now, cipherText, decodedName);
+    openModal(guest, action, now, cipherText, guest.name);
     await refreshStats();
 
-    // Get first name from the full name for the toast
     const firstName =
       (guest.name ?? "").split(",")[1]?.trim().split(" ")[0] ?? guest.name;
     showToast(
@@ -162,6 +155,35 @@ async function handleScan(rawValue) {
   }
 }
 
+// ── Camera switching ──────────────────────────────────────────
+async function switchCamera() {
+  if (availableCameras.length < 2) {
+    showToast("No other camera found", "info");
+    return;
+  }
+  currentCamIndex = (currentCamIndex + 1) % availableCameras.length;
+  const cam = availableCameras[currentCamIndex];
+
+  try {
+    await html5QrCode.stop();
+    await html5QrCode.start(
+      cam.id,
+      { fps: 10, qrbox: { width: 200, height: 200 } },
+      (decodedText) => {
+        handleScan(decodedText);
+      },
+      () => {},
+    );
+    showToast(
+      `Camera: ${cam.label || `Camera ${currentCamIndex + 1}`}`,
+      "info",
+    );
+  } catch (err) {
+    console.warn("Camera switch error:", err);
+    showToast("Could not switch camera", "error");
+  }
+}
+
 // ── QR Scanner init ───────────────────────────────────────────
 export function initScanner() {
   document.getElementById("modal-close").addEventListener("click", closeModal);
@@ -169,7 +191,6 @@ export function initScanner() {
     if (e.target === e.currentTarget) closeModal();
   });
 
-  // Manual input
   document.getElementById("manual-btn").addEventListener("click", () => {
     const val = document.getElementById("manual-id").value.trim();
     document.getElementById("manual-id").value = "";
@@ -178,6 +199,10 @@ export function initScanner() {
   document.getElementById("manual-id").addEventListener("keydown", (e) => {
     if (e.key === "Enter") document.getElementById("manual-btn").click();
   });
+
+  document
+    .getElementById("switch-camera-btn")
+    .addEventListener("click", switchCamera);
 
   const tryStart = () => {
     if (typeof Html5Qrcode === "undefined") {
@@ -189,11 +214,26 @@ export function initScanner() {
     Html5Qrcode.getCameras()
       .then((cameras) => {
         if (!cameras?.length) return;
-        const cam =
-          cameras.find((c) => /back|rear|environment/i.test(c.label)) ??
-          cameras[0];
+        availableCameras = cameras;
+
+        // Prefer the main rear camera — on phones the wide angle is usually index 0,
+        // and the standard/main camera matches "back" or comes second.
+        // We skip index 0 if there are multiple rear cameras to avoid wide angle.
+        const rearCams = cameras.filter((c) =>
+          /back|rear|environment/i.test(c.label),
+        );
+        let startCam;
+        if (rearCams.length > 1) {
+          // Pick the second rear camera — usually the standard lens, not ultra-wide
+          startCam = rearCams[1];
+          currentCamIndex = cameras.indexOf(startCam);
+        } else {
+          startCam = rearCams[0] ?? cameras[0];
+          currentCamIndex = cameras.indexOf(startCam);
+        }
+
         return html5QrCode.start(
-          cam.id,
+          startCam.id,
           { fps: 10, qrbox: { width: 200, height: 200 } },
           (decodedText) => {
             handleScan(decodedText);

@@ -59,6 +59,11 @@ export function renderApp() {
           <div class="corner br"></div>
         </div>
         <p class="scan-hint">Point camera at guest QR code</p>
+        <button id="switch-camera-btn" style="
+          background:transparent; border:1px solid #555; color:#aaa;
+          border-radius:6px; padding:0.3rem 0.8rem; font-size:0.72rem;
+          letter-spacing:1px; cursor:pointer; margin-top:0.4rem;
+        ">⇄ SWITCH CAMERA</button>
 
         <!-- Manual input fallback -->
         <div class="manual-input-wrap">

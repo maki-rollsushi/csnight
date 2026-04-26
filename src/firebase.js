@@ -7,6 +7,7 @@ import {
   getFirestore,
   doc,
   getDoc,
+  setDoc,
   collection,
   addDoc,
   query,
@@ -38,7 +39,12 @@ const db = getFirestore(app);
  *   dietaryRestrictions: "Seafood Allergy",
  *   hash:                "f129323c1e3a61794860beed385c025c",  ← MD5
  * }
- * searchKey == hash (exact match, lowercase)
+ *
+ * task_assignments doc (doc ID = guestDocId):
+ * {
+ *   taskNumber: "42",   ← "1"–"107" or "00" (wildcard)
+ *   timestamp: serverTimestamp(),
+ * }
  */
 
 /** Fetch a guest by their MD5 hash (scanned from QR code). */
@@ -92,4 +98,102 @@ export async function countInside() {
     getDocs(query(collection(db, "access_log"), where("action", "==", "exit"))),
   ]);
   return Math.max(0, enters.size - exits.size);
+}
+
+// ── Task Number Functions ─────────────────────────────────────
+
+/** Get a guest's assigned task number (returns null if none). */
+export async function getTaskNumber(guestDocId) {
+  const ref = doc(db, "task_assignments", String(guestDocId));
+  const snap = await getDoc(ref);
+  return snap.exists() ? snap.data().taskNumber : null;
+}
+
+/**
+ * Get all currently taken task numbers as an array of strings.
+ * e.g. ["1", "7", "00", "00", "42"]
+ */
+export async function getTakenTaskNumbers() {
+  const snap = await getDocs(collection(db, "task_assignments"));
+  return snap.docs.map((d) => d.data().taskNumber);
+}
+
+/** Assign a task number to a guest. */
+export async function assignTaskNumber(guestDocId, taskNumber) {
+  await setDoc(doc(db, "task_assignments", String(guestDocId)), {
+    taskNumber: String(taskNumber),
+    timestamp: serverTimestamp(),
+  });
+}
+
+/**
+ * Fetch a full attendee summary in three parallel Firestore reads.
+ * Returns an array sorted by guest name:
+ * [{ guest, status: "enter"|"exit", taskNumber, lastTimestamp }]
+ *
+ * Only guests with at least one access_log entry are included.
+ */
+export async function getSummary() {
+  const [logsSnap, tasksSnap, guestsSnap] = await Promise.all([
+    getDocs(collection(db, "access_log")),
+    getDocs(collection(db, "task_assignments")),
+    getDocs(collection(db, "guests")),
+  ]);
+
+  // guest map:  docId → guest data
+  const guestMap = {};
+  guestsSnap.docs.forEach((d) => {
+    guestMap[d.id] = { docId: d.id, ...d.data() };
+  });
+
+  // task map:  guestDocId → taskNumber
+  const taskMap = {};
+  tasksSnap.docs.forEach((d) => {
+    taskMap[d.id] = d.data().taskNumber;
+  });
+
+  // last-action map:  guestId → { action, timestamp, ms }
+  const lastActions = {};
+  logsSnap.docs.forEach((d) => {
+    const { guestId, action, timestamp } = d.data();
+    const ms = timestamp?.toMillis?.() ?? 0;
+    if (!lastActions[guestId] || ms > lastActions[guestId].ms) {
+      lastActions[guestId] = { action, timestamp, ms };
+    }
+  });
+
+  const summary = Object.entries(lastActions).map(
+    ([guestId, { action, timestamp }]) => ({
+      guest: guestMap[guestId] ?? { docId: guestId, name: `Guest ${guestId}` },
+      status: action, // "enter" = currently inside, "exit" = outside
+      taskNumber: taskMap[guestId] ?? null,
+      lastTimestamp: timestamp,
+    }),
+  );
+
+  // Sort alphabetically by name
+  summary.sort((a, b) =>
+    (a.guest.name ?? "").localeCompare(b.guest.name ?? ""),
+  );
+  return summary;
+}
+
+/**
+ * Reset all data: deletes every document in access_log and
+ * task_assignments. Works in batches of 500 (Firestore limit).
+ */
+export async function resetAll() {
+  const [logs, tasks] = await Promise.all([
+    getDocs(collection(db, "access_log")),
+    getDocs(collection(db, "task_assignments")),
+  ]);
+
+  const allDocs = [...logs.docs, ...tasks.docs];
+  if (!allDocs.length) return;
+
+  for (let i = 0; i < allDocs.length; i += 500) {
+    const b = writeBatch(db);
+    allDocs.slice(i, i + 500).forEach((d) => b.delete(d.ref));
+    await b.commit();
+  }
 }

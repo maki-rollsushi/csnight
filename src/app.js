@@ -40,8 +40,6 @@ export function renderApp() {
       </div>
     </header>
 
-  
-
     <!-- MAIN CONTENT -->
     <main class="main">
 
@@ -79,7 +77,25 @@ export function renderApp() {
       <section class="log-panel">
         <div class="log-header">
           <h2 class="log-title">ACCESS LOG</h2>
-          <div class="live-badge">● LIVE</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="live-badge">● LIVE</div>
+            <!-- RESET BUTTON -->
+            <button id="reset-btn" style="
+              background: transparent;
+              border: 1px solid #4a0000;
+              color: #7a3030;
+              border-radius: 5px;
+              padding: 3px 10px;
+              font-size: 9px;
+              letter-spacing: 2px;
+              cursor: pointer;
+              font-family: 'DM Mono', monospace;
+              transition: border-color 0.2s, color 0.2s;
+            " onmouseover="this.style.borderColor='#cc0000';this.style.color='#cc0000';"
+               onmouseout="this.style.borderColor='#4a0000';this.style.color='#7a3030';">
+              ⟳ RESET
+            </button>
+          </div>
         </div>
         <div class="log-stats" id="log-stats">
           <div class="stat">
@@ -92,6 +108,25 @@ export function renderApp() {
             <span class="stat-label">TOTAL SCANS</span>
           </div>
         </div>
+        <!-- SUMMARY BUTTON -->
+        <button id="summary-btn" style="
+          width:100%;
+          background: linear-gradient(135deg, #0a0a1a, #100020);
+          border: 1px solid #2a1a4a;
+          color: #8a70c0;
+          border-radius: 8px;
+          padding: 9px 0;
+          font-size: 10px;
+          letter-spacing: 3px;
+          cursor: pointer;
+          font-family: \'Cinzel\', serif;
+          margin-bottom: 12px;
+          transition: border-color 0.2s, color 0.2s, background 0.2s;
+        " onmouseover="this.style.borderColor=\'#7a50c0\';this.style.color=\'#c0a0ff\';this.style.background=\'linear-gradient(135deg,#12082a,#1a0835)\';"
+           onmouseout="this.style.borderColor=\'#2a1a4a\';this.style.color=\'#8a70c0\';this.style.background=\'linear-gradient(135deg,#0a0a1a,#100020)\';">
+          ♟ VIEW ATTENDEE SUMMARY
+        </button>
+
         <div class="log-list" id="log-list">
           <div class="log-empty">
             <span class="empty-icon">🃏</span>
@@ -102,7 +137,7 @@ export function renderApp() {
 
     </main>
 
-    <!-- MODAL OVERLAY -->
+    <!-- MODAL OVERLAY (Guest info) -->
     <div class="modal-overlay" id="modal-overlay">
       <div class="modal" id="modal">
         <button class="modal-close" id="modal-close">✕</button>
@@ -122,6 +157,10 @@ export function renderApp() {
         </div>
 
         <div class="modal-body">
+          <div class="modal-row">
+            <span class="modal-field">Task Number</span>
+            <span class="modal-value" id="modal-task-number" style="font-family:'DM Mono',monospace;font-size:18px;color:#c9a84c;">—</span>
+          </div>
           <div class="modal-row">
             <span class="modal-field">Payment Status</span>
             <span class="modal-value" id="modal-payment">—</span>
@@ -146,7 +185,320 @@ export function renderApp() {
       </div>
     </div>
 
-    <!-- TOAST -->
+    <!-- TASK NUMBER ASSIGNMENT MODAL -->
+    <div class="modal-overlay" id="task-modal-overlay">
+      <div class="modal" id="task-modal" style="max-width:420px;">
+        <!-- No close button — task must be assigned or skipped -->
+
+        <div class="modal-header" style="background:linear-gradient(135deg,#0a1a00,#121f00);">
+          <div class="modal-suits">
+            <span class="modal-suit-big" style="color:#c9a84c;">🎴</span>
+          </div>
+          <div class="modal-title-block">
+            <div class="modal-guest-label" style="color:#7a9a60;">TASK ASSIGNMENT</div>
+            <div class="modal-name" id="task-guest-name" style="color:#e8f0d8;font-size:clamp(13px,3.5vw,16px);">—</div>
+            <div style="font-family:'DM Mono',monospace;font-size:10px;color:#4a7a40;margin-top:4px;" id="task-availability">
+              Loading availability…
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-body" style="background:#080a00;">
+          <p style="
+            font-family:'DM Mono',monospace;
+            font-size:11px;
+            color:#7a9a60;
+            letter-spacing:1px;
+            margin-bottom:14px;
+            line-height:1.5;
+          ">
+            Enter a task number <strong style="color:#c9a84c;">1 – 107</strong> for this guest,<br>
+            or <strong style="color:#c9a84c;">00</strong> for a wildcard slot.
+          </p>
+          <div class="manual-row" style="gap:10px;">
+            <input
+              type="text"
+              id="task-number-input"
+              class="manual-input"
+              placeholder="e.g. 42 or 00"
+              autocomplete="off"
+              inputmode="numeric"
+              style="font-size:1.1rem;letter-spacing:3px;text-align:center;"
+            />
+            <button id="task-confirm-btn" class="btn-manual" style="
+              background:linear-gradient(135deg,#1a4a00,#2a6a00);
+              border-color:#3a7a20;
+              color:#c8fce0;
+              min-width:80px;
+            ">ASSIGN</button>
+          </div>
+          <p id="task-error" style="
+            color:#ff6060;
+            font-size:10px;
+            font-family:'DM Mono',monospace;
+            letter-spacing:1px;
+            margin-top:10px;
+            display:none;
+          "></p>
+        </div>
+
+        <div class="modal-action" style="background:#050800;border-top:1px solid #1a2a00;padding:10px 20px;display:flex;justify-content:center;">
+          <button id="task-skip-btn" style="
+            background:transparent;
+            border:1px solid #2a1a00;
+            color:#5a4030;
+            border-radius:6px;
+            padding:6px 20px;
+            font-size:9px;
+            letter-spacing:2px;
+            cursor:pointer;
+            font-family:'DM Mono',monospace;
+          ">SKIP FOR NOW</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESET CONFIRMATION MODAL -->
+    <div class="modal-overlay" id="reset-modal-overlay">
+      <div class="modal" id="reset-modal" style="max-width:380px;">
+        <button class="modal-close" id="reset-modal-close">✕</button>
+
+        <div class="modal-header" style="background:linear-gradient(135deg,#1a0000,#2a0000);">
+          <div class="modal-suits">
+            <span class="modal-suit-big" style="color:#cc0000;font-size:36px;">⚠</span>
+          </div>
+          <div class="modal-title-block">
+            <div class="modal-guest-label">SYSTEM RESET</div>
+            <div class="modal-name" style="color:#ff6060;font-size:clamp(13px,3.5vw,16px);">DANGER ZONE</div>
+            <div style="font-family:'DM Mono',monospace;font-size:10px;color:#7a3030;margin-top:4px;">
+              This will erase ALL scan logs &amp; task assignments
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-body">
+          <p style="
+            font-family:'DM Mono',monospace;
+            font-size:11px;
+            color:#9a5050;
+            letter-spacing:1px;
+            margin-bottom:14px;
+          ">Enter the reset code to proceed:</p>
+          <div class="manual-row" style="gap:10px;">
+            <input
+              type="password"
+              id="reset-code-input"
+              class="manual-input"
+              placeholder="Reset code"
+              autocomplete="off"
+            />
+            <button id="reset-confirm-btn" class="btn-manual" style="
+              background:linear-gradient(135deg,#6a0000,#aa0000);
+              border-color:#cc0000;
+              color:#ffd0d0;
+              min-width:80px;
+            ">RESET</button>
+          </div>
+          <p id="reset-error" style="
+            color:#ff6060;
+            font-size:10px;
+            font-family:'DM Mono',monospace;
+            letter-spacing:1px;
+            margin-top:10px;
+            display:none;
+          "></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ATTENDEE SUMMARY MODAL -->
+    <div class="modal-overlay" id="summary-modal-overlay" style="align-items:flex-start;padding-top:0;">
+      <div class="modal" style="
+        max-width:520px;
+        width:100%;
+        border-radius:0 0 var(--radius-lg) var(--radius-lg);
+        max-height:92vh;
+        display:flex;
+        flex-direction:column;
+        overflow:hidden;
+      ">
+        <button class="modal-close" id="summary-modal-close" style="top:14px;right:14px;">✕</button>
+
+        <!-- Header -->
+        <div class="modal-header" style="
+          background:linear-gradient(135deg,#080012,#120028);
+          border-bottom:1px solid #2a1a4a;
+          flex-shrink:0;
+        ">
+          <div class="modal-suits">
+            <span class="modal-suit-big" style="color:#9a70e0;font-size:36px;">♟</span>
+          </div>
+          <div class="modal-title-block" style="flex:1;">
+            <div class="modal-guest-label" style="color:#5a3a8a;">ATTENDEE SUMMARY</div>
+            <div style="display:flex;gap:16px;align-items:center;margin-top:4px;">
+              <span style="font-family:\'DM Mono\',monospace;font-size:13px;color:#4ecb8a;">
+                ▶ INSIDE: <strong id="summary-inside-count">—</strong>
+              </span>
+              <span style="color:#3a1a5a;">|</span>
+              <span style="font-family:\'DM Mono\',monospace;font-size:13px;color:#ff6060;">
+                ◀ OUTSIDE: <strong id="summary-outside-count">—</strong>
+              </span>
+            </div>
+          </div>
+          <button id="summary-refresh-btn" style="
+            background:transparent;
+            border:1px solid #3a2a5a;
+            color:#7a50c0;
+            border-radius:6px;
+            padding:5px 10px;
+            font-size:11px;
+            cursor:pointer;
+            font-family:\'DM Mono\',monospace;
+            flex-shrink:0;
+          ">⟳</button>
+        </div>
+
+        <!-- Filter tabs + search -->
+        <div style="
+          background:#080012;
+          border-bottom:1px solid #1a0a30;
+          padding:10px 16px;
+          display:flex;
+          gap:8px;
+          align-items:center;
+          flex-shrink:0;
+        ">
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <button class="sum-tab active" data-filter="all" id="sum-tab-all">ALL</button>
+            <button class="sum-tab" data-filter="enter" id="sum-tab-enter">INSIDE</button>
+            <button class="sum-tab" data-filter="exit" id="sum-tab-exit">OUTSIDE</button>
+          </div>
+          <input
+            type="text"
+            id="summary-search"
+            placeholder="Search name or task #…"
+            style="
+              flex:1;
+              background:#0c0020;
+              border:1px solid #2a1a4a;
+              border-radius:6px;
+              padding:6px 10px;
+              font-family:\'DM Mono\',monospace;
+              font-size:11px;
+              color:#c0a0ff;
+              letter-spacing:1px;
+              outline:none;
+            "
+          />
+        </div>
+
+        <!-- List -->
+        <div id="summary-list" style="
+          flex:1;
+          overflow-y:auto;
+          padding:10px 12px;
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+          background:#060010;
+        ">
+          <div style="
+            text-align:center;
+            padding:40px 0;
+            font-family:\'DM Mono\',monospace;
+            font-size:11px;
+            color:#3a2a5a;
+            letter-spacing:2px;
+          ">Loading…</div>
+        </div>
+
+        <style>
+          .sum-tab {
+            background: transparent;
+            border: 1px solid #2a1a4a;
+            color: #5a3a8a;
+            border-radius: 5px;
+            padding: 4px 10px;
+            font-size: 9px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            font-family: \'Cinzel\', serif;
+            transition: all 0.15s;
+          }
+          .sum-tab.active {
+            background: #2a1a4a;
+            color: #c0a0ff;
+            border-color: #7a50c0;
+          }
+          .sum-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            background: #0c0020;
+            border-left: 3px solid transparent;
+            animation: slide-in 0.22s ease-out;
+          }
+          .sum-row.inside { border-left-color: #2ea86a; }
+          .sum-row.outside { border-left-color: #cc0000; }
+          .sum-row-name {
+            flex: 1;
+            font-size: 11px;
+            font-family: \'Cinzel\', serif;
+            color: #e0d0f0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .sum-row-task {
+            font-family: \'DM Mono\', monospace;
+            font-size: 10px;
+            background: rgba(201,168,76,0.12);
+            border: 1px solid rgba(201,168,76,0.3);
+            color: #c9a84c;
+            border-radius: 4px;
+            padding: 2px 7px;
+            letter-spacing: 1px;
+            flex-shrink: 0;
+          }
+          .sum-row-task.wildcard {
+            background: rgba(204,0,0,0.12);
+            border-color: rgba(204,0,0,0.35);
+            color: #ff6060;
+          }
+          .sum-row-badge {
+            font-size: 9px;
+            font-family: \'Cinzel\', serif;
+            letter-spacing: 1px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            flex-shrink: 0;
+          }
+          .sum-row-badge.inside {
+            background: rgba(26,122,74,0.2);
+            color: #4ecb8a;
+            border: 1px solid rgba(26,122,74,0.4);
+          }
+          .sum-row-badge.outside {
+            background: rgba(204,0,0,0.15);
+            color: #ff6060;
+            border: 1px solid rgba(204,0,0,0.35);
+          }
+          .sum-row-ts {
+            font-size: 9px;
+            font-family: \'DM Mono\', monospace;
+            color: #3a2a5a;
+            flex-shrink: 0;
+          }
+          #summary-list::-webkit-scrollbar { width: 3px; }
+          #summary-list::-webkit-scrollbar-track { background: #060010; }
+          #summary-list::-webkit-scrollbar-thumb { background: #3a1a6a; border-radius: 4px; }
+        </style>
+      </div>
+    </div>
+
+        <!-- TOAST -->
     <div class="toast" id="toast"></div>
   `;
 }

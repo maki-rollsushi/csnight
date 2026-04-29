@@ -174,7 +174,7 @@ function openModal(
     badge.style.cursor = "default";
     badge.onclick = null;
     actionArea.innerHTML = `<div class="action-badge enter" id="action-badge">▶ ENTERING</div>`;
-  } else {
+  } else if (action === "exit") {
     // Exiting — show confirm button
     actionArea.innerHTML = `
       <button id="confirm-exit-btn" class="action-badge exit" style="
@@ -192,6 +192,10 @@ function openModal(
       .addEventListener("click", async () => {
         await commitExit();
       });
+  } else {
+    // View mode (opened from summary) — show current status badge only
+    const isInside = action === "enter" || action === "view-inside";
+    actionArea.innerHTML = `<div class="action-badge ${isInside ? "enter" : "exit"}" id="action-badge">${isInside ? "▶ INSIDE" : "◀ OUTSIDE"}</div>`;
   }
 
   // Store pending exit info so the confirm button can use it
@@ -434,9 +438,10 @@ async function handleScan(rawValue) {
 
   try {
     const isNumeric = /^\d+$/.test(cipherText);
-    let guest = isNumeric
-      ? await fetchGuestById(cipherText)
-      : await fetchGuestByCipher(cipherText);
+    // fetchGuestByCipher / fetchGuestById are synchronous (in-memory map)
+    const guest = isNumeric
+      ? fetchGuestById(cipherText)
+      : fetchGuestByCipher(cipherText);
 
     if (!guest) {
       showToast("No guest found", "error");
@@ -444,19 +449,22 @@ async function handleScan(rawValue) {
       return;
     }
 
-    const lastAction = await getLastAction(guest.docId);
-    const action = lastAction === "enter" ? "exit" : "enter";
+    // ── Run both Firestore reads in parallel (2× faster) ──────
+    const [lastAction, assignment] = await Promise.all([
+      getLastAction(guest.docId),
+      getAssignment(guest.docId),
+    ]);
 
-    const { taskNumber, tableNumber } = await getAssignment(guest.docId);
+    const action = lastAction === "enter" ? "exit" : "enter";
+    const { taskNumber, tableNumber } = assignment;
 
     const firstName =
       (guest.name ?? "").split(",")[1]?.trim().split(" ")[0] ?? guest.name;
 
     if (action === "enter" && !taskNumber) {
       // ── First entry: assign task + table first ─────────────
-      // Log entry AFTER assignment (done inside handleTaskConfirm)
       showToast(`Welcome, ${firstName}! Assign task # ♠`, "enter");
-      totalScans++; // pre-increment; appendLog called after assign
+      totalScans++;
       await refreshStats();
       await openTaskModal(guest, action, new Date(), cipherText);
       // Scanner re-arms after task modal is closed (closeTaskModal / skip)
@@ -475,10 +483,11 @@ async function handleScan(rawValue) {
         tableNumber,
       );
     } else {
-      // ── Re-entry: log immediately and show modal ───────────
+      // ── Re-entry (already has task): log immediately and show modal ──
       await logAccess(guest.docId, action);
       totalScans++;
       appendLog(guest, action, new Date(), taskNumber, tableNumber);
+      scanning = true; // re-arm before opening modal so other scans work
       openModal(
         guest,
         action,
@@ -596,8 +605,16 @@ function renderSummaryList() {
             white-space:nowrap;
           ">${row.guest.section}</span>`
         : "";
+      const guestJson = JSON.stringify(row.guest)
+        .replace(/'/g, "&#39;")
+        .replace(/"/g, "&quot;");
+      const taskJson = row.taskNumber ? row.taskNumber : "";
+      const tableJson = row.tableNumber ? row.tableNumber : "";
       return `
-        <div class="sum-row ${isInside ? "inside" : "outside"}">
+        <div class="sum-row ${isInside ? "inside" : "outside"}"
+          style="cursor:pointer;"
+          onclick='openGuestDetailFromSummary(${JSON.stringify(row.guest.docId)}, ${JSON.stringify(row.taskNumber)}, ${JSON.stringify(row.tableNumber)}, ${JSON.stringify(isInside ? "enter" : "exit")})'
+        >
           <span style="font-size:14px;color:#4a2a7a;flex-shrink:0;">${rnd()}</span>
           <span class="sum-row-name">${row.guest.name ?? row.guest.docId}</span>
           ${sectionBadge}
@@ -652,6 +669,27 @@ function openSummaryModal() {
 function closeSummaryModal() {
   document.getElementById("summary-modal-overlay").classList.remove("active");
 }
+
+// ── Open guest detail modal from summary row ──────────────────
+window.openGuestDetailFromSummary = function (
+  docId,
+  taskNumber,
+  tableNumber,
+  lastStatus,
+) {
+  const guest = fetchGuestById(docId);
+  if (!guest) return;
+  closeSummaryModal();
+  openModal(
+    guest,
+    lastStatus,
+    null,
+    guest.hash ?? docId,
+    guest.name,
+    taskNumber,
+    tableNumber,
+  );
+};
 
 // ── QR Scanner init ───────────────────────────────────────────
 export function initScanner() {

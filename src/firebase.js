@@ -1,5 +1,14 @@
 // ============================================================
-//  firebase.js  –  Firestore integration
+//  firebase.js  –  Firestore integration + local cache layer
+//
+//  CACHING STRATEGY:
+//  - Guest data is cached in localStorage (key: "csnight_guests")
+//    with a TTL of 30 minutes. Reads always try cache first.
+//  - Access log, task/table assignments are NOT cached locally
+//    because they change frequently and must stay accurate.
+//  - Any device that writes (logAccess, assignTaskNumber, etc.)
+//    still writes directly to Firestore so all devices see it.
+//  - Call invalidateGuestCache() after any guest-data change.
 // ============================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -31,42 +40,85 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// ── Local cache helpers ───────────────────────────────────────
+const CACHE_KEY = "csnight_guests";
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+function readCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL) return null; // expired
+    return data; // array of guest objects
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(guestsArray) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ ts: Date.now(), data: guestsArray }),
+    );
+  } catch {
+    // Storage quota exceeded or private browsing — ignore
+  }
+}
+
+export function invalidateGuestCache() {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Fetch ALL guests from Firestore and refresh the cache. */
+async function fetchAndCacheAllGuests() {
+  const snap = await getDocs(collection(db, "guests"));
+  const guests = snap.docs.map((d) => ({ docId: d.id, ...d.data() }));
+  writeCache(guests);
+  return guests;
+}
+
 /**
- * Firestore document shape (doc ID = zero-padded # e.g. "0001"):
- * {
- *   name:                "Abela, Niño, S",
- *   paymentStatus:       "Installment – Completed",
- *   dietaryRestrictions: "Seafood Allergy",
- *   hash:                "f129323c1e3a61794860beed385c025c",  ← MD5
- * }
- *
- * task_assignments doc (doc ID = guestDocId):
- * {
- *   taskNumber: "42",   ← "1"–"107" or "00" (wildcard)
- *   timestamp: serverTimestamp(),
- * }
+ * Get the full guest list — from cache if fresh, else Firestore.
+ * This is the only function that should be used internally for
+ * guest lookups so every read benefits from the cache.
  */
+async function getAllGuests() {
+  const cached = readCache();
+  if (cached) return cached;
+  return fetchAndCacheAllGuests();
+}
+
+// ── Public guest lookup functions ─────────────────────────────
 
 /** Fetch a guest by their MD5 hash (scanned from QR code). */
 export async function fetchGuestByCipher(hash) {
   const key = hash.trim().toLowerCase();
-  const q = query(collection(db, "guests"), where("hash", "==", key));
-  const snap = await getDocs(q);
-  if (!snap.empty) {
-    const d = snap.docs[0];
-    return { docId: d.id, ...d.data() };
-  }
-  return null;
+  const guests = await getAllGuests();
+  return guests.find((g) => g.hash === key) ?? null;
 }
 
 /** Fetch a guest by Firestore document ID (zero-padded #, e.g. "0001"). */
 export async function fetchGuestById(id) {
   const padded = String(id).padStart(4, "0");
-  const ref = doc(db, "guests", padded);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return null;
-  return { docId: snap.id, ...snap.data() };
+  const guests = await getAllGuests();
+  return guests.find((g) => g.docId === padded) ?? null;
 }
+
+/**
+ * Force a fresh pull from Firestore, bypassing the cache.
+ * Call this from a "Refresh Cache" button if you need it.
+ */
+export async function refreshGuestCache() {
+  return fetchAndCacheAllGuests();
+}
+
+// ── Access log ────────────────────────────────────────────────
 
 /** Log an entry or exit event. */
 export async function logAccess(guestDocId, action) {
@@ -100,13 +152,30 @@ export async function countInside() {
   return Math.max(0, enters.size - exits.size);
 }
 
-// ── Task Number Functions ─────────────────────────────────────
+// ── Task & Table Assignment ───────────────────────────────────
 
-/** Get a guest's assigned task number (returns null if none). */
-export async function getTaskNumber(guestDocId) {
+/**
+ * Firestore doc shape for task_assignments (doc ID = guestDocId):
+ * {
+ *   taskNumber:  "42",   ← "1"–"107" or "00" (wildcard)
+ *   tableNumber: "5",    ← table the guest is seated at
+ *   timestamp: serverTimestamp(),
+ * }
+ */
+
+/** Get a guest's assigned task + table numbers (returns null fields if none). */
+export async function getAssignment(guestDocId) {
   const ref = doc(db, "task_assignments", String(guestDocId));
   const snap = await getDoc(ref);
-  return snap.exists() ? snap.data().taskNumber : null;
+  if (!snap.exists()) return { taskNumber: null, tableNumber: null };
+  const { taskNumber = null, tableNumber = null } = snap.data();
+  return { taskNumber, tableNumber };
+}
+
+/** @deprecated Use getAssignment instead */
+export async function getTaskNumber(guestDocId) {
+  const { taskNumber } = await getAssignment(guestDocId);
+  return taskNumber;
 }
 
 /**
@@ -115,41 +184,50 @@ export async function getTaskNumber(guestDocId) {
  */
 export async function getTakenTaskNumbers() {
   const snap = await getDocs(collection(db, "task_assignments"));
-  return snap.docs.map((d) => d.data().taskNumber);
+  return snap.docs.map((d) => d.data().taskNumber).filter(Boolean);
 }
 
-/** Assign a task number to a guest. */
-export async function assignTaskNumber(guestDocId, taskNumber) {
+/** Assign a task number AND table number to a guest. */
+export async function assignTaskAndTable(guestDocId, taskNumber, tableNumber) {
   await setDoc(doc(db, "task_assignments", String(guestDocId)), {
     taskNumber: String(taskNumber),
+    tableNumber: tableNumber ? String(tableNumber) : null,
     timestamp: serverTimestamp(),
   });
+}
+
+/** @deprecated Use assignTaskAndTable instead */
+export async function assignTaskNumber(guestDocId, taskNumber) {
+  return assignTaskAndTable(guestDocId, taskNumber, null);
 }
 
 /**
  * Fetch a full attendee summary in three parallel Firestore reads.
  * Returns an array sorted by guest name:
- * [{ guest, status: "enter"|"exit", taskNumber, lastTimestamp }]
+ * [{ guest, status: "enter"|"exit", taskNumber, tableNumber, lastTimestamp }]
  *
  * Only guests with at least one access_log entry are included.
  */
 export async function getSummary() {
-  const [logsSnap, tasksSnap, guestsSnap] = await Promise.all([
+  const [logsSnap, tasksSnap] = await Promise.all([
     getDocs(collection(db, "access_log")),
     getDocs(collection(db, "task_assignments")),
-    getDocs(collection(db, "guests")),
   ]);
 
-  // guest map:  docId → guest data
+  // guest map from cache:  docId → guest data
+  const allGuests = await getAllGuests();
   const guestMap = {};
-  guestsSnap.docs.forEach((d) => {
-    guestMap[d.id] = { docId: d.id, ...d.data() };
+  allGuests.forEach((g) => {
+    guestMap[g.docId] = g;
   });
 
-  // task map:  guestDocId → taskNumber
-  const taskMap = {};
+  // task/table map:  guestDocId → { taskNumber, tableNumber }
+  const assignMap = {};
   tasksSnap.docs.forEach((d) => {
-    taskMap[d.id] = d.data().taskNumber;
+    assignMap[d.id] = {
+      taskNumber: d.data().taskNumber ?? null,
+      tableNumber: d.data().tableNumber ?? null,
+    };
   });
 
   // last-action map:  guestId → { action, timestamp, ms }
@@ -165,13 +243,13 @@ export async function getSummary() {
   const summary = Object.entries(lastActions).map(
     ([guestId, { action, timestamp }]) => ({
       guest: guestMap[guestId] ?? { docId: guestId, name: `Guest ${guestId}` },
-      status: action, // "enter" = currently inside, "exit" = outside
-      taskNumber: taskMap[guestId] ?? null,
+      status: action,
+      taskNumber: assignMap[guestId]?.taskNumber ?? null,
+      tableNumber: assignMap[guestId]?.tableNumber ?? null,
       lastTimestamp: timestamp,
     }),
   );
 
-  // Sort alphabetically by name
   summary.sort((a, b) =>
     (a.guest.name ?? "").localeCompare(b.guest.name ?? ""),
   );

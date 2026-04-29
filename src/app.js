@@ -162,8 +162,16 @@ export function renderApp() {
             <span class="modal-value" id="modal-task-number" style="font-family:'DM Mono',monospace;font-size:18px;color:#c9a84c;">—</span>
           </div>
           <div class="modal-row">
+            <span class="modal-field">Table Number</span>
+            <span class="modal-value" id="modal-table-number" style="font-family:'DM Mono',monospace;font-size:18px;color:#70b0ff;">—</span>
+          </div>
+          <div class="modal-row">
             <span class="modal-field">Payment Status</span>
             <span class="modal-value" id="modal-payment">—</span>
+          </div>
+          <div class="modal-row">
+            <span class="modal-field">Section</span>
+            <span class="modal-value" id="modal-section">—</span>
           </div>
           <div class="modal-row">
             <span class="modal-field">Dietary Note</span>
@@ -215,15 +223,26 @@ export function renderApp() {
             Enter a task number <strong style="color:#c9a84c;">1 – 107</strong> for this guest,<br>
             or <strong style="color:#c9a84c;">00</strong> for a wildcard slot.
           </p>
-          <div class="manual-row" style="gap:10px;">
+          <div class="manual-row" style="gap:10px;margin-bottom:10px;">
             <input
               type="text"
               id="task-number-input"
               class="manual-input"
-              placeholder="e.g. 42 or 00"
+              placeholder="Task # (e.g. 42 or 00)"
               autocomplete="off"
               inputmode="numeric"
               style="font-size:1.1rem;letter-spacing:3px;text-align:center;"
+            />
+          </div>
+          <div class="manual-row" style="gap:10px;">
+            <input
+              type="text"
+              id="task-table-input"
+              class="manual-input"
+              placeholder="Table # (optional)"
+              autocomplete="off"
+              inputmode="numeric"
+              style="font-size:1.1rem;letter-spacing:3px;text-align:center;border-color:#1a3a5a;"
             />
             <button id="task-confirm-btn" class="btn-manual" style="
               background:linear-gradient(135deg,#1a4a00,#2a6a00);

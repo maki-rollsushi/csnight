@@ -1,5 +1,14 @@
 // ============================================================
-//  scanner.js  –  QR scanning + Base64 decode + modal + log
+//  scanner.js  –  QR scanning + Firestore lookup + modal + log
+//
+//  Changes from v1:
+//  - Guest data is served from localStorage cache (firebase.js)
+//    so lookups are instant on slow connections.
+//  - Task assignment modal now also collects a TABLE NUMBER.
+//  - Scanning a guest who is already INSIDE no longer auto-logs
+//    an exit. Instead, the guest modal shows a "CONFIRM EXIT"
+//    button. The scanner re-arms immediately so other guests
+//    can be scanned while the modal is open.
 // ============================================================
 
 import {
@@ -8,11 +17,12 @@ import {
   logAccess,
   getLastAction,
   countInside,
-  getTaskNumber,
+  getAssignment,
   getTakenTaskNumbers,
-  assignTaskNumber,
+  assignTaskAndTable,
   resetAll,
   getSummary,
+  refreshGuestCache,
 } from "./firebase.js";
 
 // ── State ─────────────────────────────────────────────────────
@@ -24,8 +34,11 @@ let html5QrCode = null;
 let availableCameras = [];
 let currentCamIndex = 0;
 
-// Holds scan result while waiting for task number assignment
+// Holds scan result while waiting for task/table assignment
 let pendingTask = null;
+
+// Holds guest data for the exit-confirmation flow
+let pendingExit = null;
 
 // ── Helpers ───────────────────────────────────────────────────
 function randomSuit() {
@@ -59,7 +72,7 @@ async function refreshStats() {
 }
 
 // ── Log list ──────────────────────────────────────────────────
-function appendLog(guest, action, ts, taskNumber) {
+function appendLog(guest, action, ts, taskNumber, tableNumber) {
   const list = document.getElementById("log-list");
   const empty = list.querySelector(".log-empty");
   if (empty) empty.remove();
@@ -81,10 +94,24 @@ function appendLog(guest, action, ts, taskNumber) {
       ">#${taskNumber}</span>`
     : "";
 
+  const tableLabel = tableNumber
+    ? `<span style="
+        font-family:'DM Mono',monospace;
+        font-size:9px;
+        background:rgba(80,160,255,0.12);
+        border:1px solid rgba(80,160,255,0.3);
+        color:#70b0ff;
+        border-radius:4px;
+        padding:1px 6px;
+        margin-left:4px;
+        letter-spacing:1px;
+      ">T${tableNumber}</span>`
+    : "";
+
   item.innerHTML = `
     <span class="log-suit">${randomSuit()}</span>
     <div class="log-info">
-      <span class="log-name">${guest.name}${taskLabel}</span>
+      <span class="log-name">${guest.name}${taskLabel}${tableLabel}</span>
       <span class="log-id">id: ${guest.docId}</span>
     </div>
     <div class="log-right">
@@ -96,13 +123,22 @@ function appendLog(guest, action, ts, taskNumber) {
 }
 
 // ── Main guest modal ───────────────────────────────────────────
-function openModal(guest, action, ts, cipherText, decodedName, taskNumber) {
+function openModal(
+  guest,
+  action,
+  ts,
+  cipherText,
+  decodedName,
+  taskNumber,
+  tableNumber,
+) {
   document.getElementById("modal-suit-icon").textContent = randomSuit();
   document.getElementById("modal-name").textContent = guest.name;
   document.getElementById("modal-id").textContent = `ID: ${guest.docId}`;
   document.getElementById("modal-decoded").textContent = `→ ${decodedName}`;
   document.getElementById("modal-payment").textContent =
     guest.paymentStatus ?? "—";
+  document.getElementById("modal-section").textContent = guest.section ?? "—";
   document.getElementById("modal-dietary").textContent =
     guest.dietaryRestrictions || "None";
   document.getElementById("modal-status-text").textContent = guest.paymentStatus
@@ -122,26 +158,89 @@ function openModal(guest, action, ts, cipherText, decodedName, taskNumber) {
     taskEl.style.color = "#5a3535";
   }
 
+  // Table number display
+  const tableEl = document.getElementById("modal-table-number");
+  if (tableEl) {
+    tableEl.textContent = tableNumber ? `Table ${tableNumber}` : "—";
+    tableEl.style.color = tableNumber ? "#70b0ff" : "#5a3535";
+  }
+
   const badge = document.getElementById("action-badge");
-  badge.textContent = action === "enter" ? "▶ ENTERING" : "◀ EXITING";
-  badge.className = `action-badge ${action}`;
+  const actionArea = document.getElementById("modal-action");
+
+  if (action === "enter") {
+    // Entering — show simple badge
+    badge.textContent = "▶ ENTERING";
+    badge.className = "action-badge enter";
+    badge.style.cursor = "default";
+    badge.onclick = null;
+    actionArea.innerHTML = `<div class="action-badge enter" id="action-badge">▶ ENTERING</div>`;
+  } else {
+    // Exiting — show confirm button
+    actionArea.innerHTML = `
+      <button id="confirm-exit-btn" class="action-badge exit" style="
+        cursor:pointer;
+        border:none;
+        width:100%;
+        font-family:'Cinzel',serif;
+        font-size:15px;
+        letter-spacing:4px;
+        padding:13px 40px;
+      ">◀ CONFIRM EXIT</button>
+    `;
+    document
+      .getElementById("confirm-exit-btn")
+      .addEventListener("click", async () => {
+        await commitExit();
+      });
+  }
+
+  // Store pending exit info so the confirm button can use it
+  if (action === "exit") {
+    pendingExit = { guest, ts, cipherText, taskNumber, tableNumber };
+  } else {
+    pendingExit = null;
+  }
 
   document.getElementById("modal-overlay").classList.add("active");
 }
 
-function closeModal() {
-  document.getElementById("modal-overlay").classList.remove("active");
-  setTimeout(() => {
-    scanning = true;
-  }, 1200);
+async function commitExit() {
+  if (!pendingExit) return;
+  const { guest, ts, taskNumber, tableNumber } = pendingExit;
+  pendingExit = null;
+
+  try {
+    await logAccess(guest.docId, "exit");
+    totalScans++;
+    appendLog(guest, "exit", new Date(), taskNumber, tableNumber);
+
+    const firstName =
+      (guest.name ?? "").split(",")[1]?.trim().split(" ")[0] ?? guest.name;
+    showToast(`Goodbye, ${firstName}! ♦`, "exit");
+    await refreshStats();
+  } catch (err) {
+    showToast("Exit error: " + (err.message ?? "Unknown"), "error");
+  }
+
+  closeModal();
 }
 
-// ── Task Number Modal ─────────────────────────────────────────
+function closeModal() {
+  document.getElementById("modal-overlay").classList.remove("active");
+  pendingExit = null;
+  setTimeout(() => {
+    scanning = true;
+  }, 600);
+}
+
+// ── Task + Table Assignment Modal ─────────────────────────────
 async function openTaskModal(guest, action, ts, cipherText) {
   pendingTask = { guest, action, ts, cipherText };
 
   document.getElementById("task-guest-name").textContent = guest.name;
   document.getElementById("task-number-input").value = "";
+  document.getElementById("task-table-input").value = "";
   document.getElementById("task-error").style.display = "none";
 
   // Load and display availability
@@ -170,7 +269,8 @@ function closeTaskModal() {
 async function handleTaskConfirm() {
   if (!pendingTask) return;
 
-  const raw = document.getElementById("task-number-input").value.trim();
+  const rawTask = document.getElementById("task-number-input").value.trim();
+  const rawTable = document.getElementById("task-table-input").value.trim();
   const errorEl = document.getElementById("task-error");
 
   const showErr = (msg) => {
@@ -178,26 +278,36 @@ async function handleTaskConfirm() {
     errorEl.style.display = "block";
   };
 
-  // ── Validate input ────────────────────────────────────────
-  if (!raw) {
+  // ── Validate task number ───────────────────────────────────
+  if (!rawTask) {
     showErr("Please enter a task number.");
     return;
   }
 
   let taskNumber;
-
-  if (raw === "00" || raw === "0") {
+  if (rawTask === "00" || rawTask === "0") {
     taskNumber = "00";
   } else {
-    const num = parseInt(raw, 10);
-    if (isNaN(num) || num < 1 || num > 107 || String(num) !== raw) {
+    const num = parseInt(rawTask, 10);
+    if (isNaN(num) || num < 1 || num > 107 || String(num) !== rawTask) {
       showErr("Enter a whole number 1–107, or 00 for a wildcard.");
       return;
     }
     taskNumber = String(num);
   }
 
-  // ── Check availability ────────────────────────────────────
+  // ── Validate table number (optional but must be positive int if given) ──
+  let tableNumber = null;
+  if (rawTable) {
+    const tNum = parseInt(rawTable, 10);
+    if (isNaN(tNum) || tNum < 1 || String(tNum) !== rawTable) {
+      showErr("Table number must be a positive whole number (or leave blank).");
+      return;
+    }
+    tableNumber = String(tNum);
+  }
+
+  // ── Check task availability ────────────────────────────────
   errorEl.style.display = "none";
   document.getElementById("task-confirm-btn").textContent = "…";
   document.getElementById("task-confirm-btn").disabled = true;
@@ -219,19 +329,31 @@ async function handleTaskConfirm() {
     }
 
     // ── Assign ────────────────────────────────────────────
-    await assignTaskNumber(pendingTask.guest.docId, taskNumber);
+    await assignTaskAndTable(pendingTask.guest.docId, taskNumber, tableNumber);
 
     const { guest, action, ts, cipherText } = pendingTask;
     closeTaskModal();
 
-    // Show the regular modal with the newly assigned task number
-    openModal(guest, action, ts, cipherText, guest.name, taskNumber);
+    // Log the entry now that assignment is done
+    await logAccess(guest.docId, action);
+    totalScans++;
+    appendLog(guest, action, new Date(), taskNumber, tableNumber);
+
+    openModal(
+      guest,
+      action,
+      ts,
+      cipherText,
+      guest.name,
+      taskNumber,
+      tableNumber,
+    );
 
     const firstName =
       (guest.name ?? "").split(",")[1]?.trim().split(" ")[0] ?? guest.name;
     showToast(
-      `Task #${taskNumber} → ${firstName} ${action === "enter" ? "♠" : "♦"}`,
-      action === "enter" ? "enter" : "exit",
+      `Task #${taskNumber}${tableNumber ? ` · Table ${tableNumber}` : ""} → ${firstName} ♠`,
+      "enter",
     );
     await refreshStats();
   } catch (err) {
@@ -273,13 +395,12 @@ async function handleResetConfirm() {
     showToast("Resetting system…", "info");
     await resetAll();
 
-    // Reset local counters
     totalScans = 0;
     insideCount = 0;
     scanning = true;
     pendingTask = null;
+    pendingExit = null;
 
-    // Clear the log list
     document.getElementById("log-list").innerHTML = `
       <div class="log-empty">
         <span class="empty-icon">🃏</span>
@@ -327,35 +448,49 @@ async function handleScan(rawValue) {
     const lastAction = await getLastAction(guest.docId);
     const action = lastAction === "enter" ? "exit" : "enter";
 
-    // Fetch existing task number (may already be assigned from a prior entry)
-    const taskNumber = await getTaskNumber(guest.docId);
-
-    await logAccess(guest.docId, action);
-    totalScans++;
-
-    const now = new Date();
-    appendLog(guest, action, now, taskNumber);
+    const { taskNumber, tableNumber } = await getAssignment(guest.docId);
 
     const firstName =
       (guest.name ?? "").split(",")[1]?.trim().split(" ")[0] ?? guest.name;
 
     if (action === "enter" && !taskNumber) {
-      // ── First entry: must assign a task number ────────────
+      // ── First entry: assign task + table first ─────────────
+      // Log entry AFTER assignment (done inside handleTaskConfirm)
       showToast(`Welcome, ${firstName}! Assign task # ♠`, "enter");
+      totalScans++; // pre-increment; appendLog called after assign
       await refreshStats();
-      // Open the task assignment modal (it will open the guest modal on confirm)
-      await openTaskModal(guest, action, now, cipherText);
-    } else {
-      // ── Re-entry or exit: show modal directly ─────────────
-      openModal(guest, action, now, cipherText, guest.name, taskNumber);
-      await refreshStats();
-
-      showToast(
-        action === "enter"
-          ? `Welcome back, ${firstName}! ♠`
-          : `Goodbye, ${firstName}! ♦`,
-        action === "enter" ? "enter" : "exit",
+      await openTaskModal(guest, action, new Date(), cipherText);
+      // Scanner re-arms after task modal is closed (closeTaskModal / skip)
+    } else if (action === "exit") {
+      // ── Exit: show modal with a confirm button ─────────────
+      // Do NOT log yet — wait for the operator to press "CONFIRM EXIT"
+      showToast(`Tap CONFIRM EXIT for ${firstName} ♦`, "exit");
+      scanning = true; // re-arm so other guests can be scanned
+      openModal(
+        guest,
+        "exit",
+        new Date(),
+        cipherText,
+        guest.name,
+        taskNumber,
+        tableNumber,
       );
+    } else {
+      // ── Re-entry: log immediately and show modal ───────────
+      await logAccess(guest.docId, action);
+      totalScans++;
+      appendLog(guest, action, new Date(), taskNumber, tableNumber);
+      openModal(
+        guest,
+        action,
+        new Date(),
+        cipherText,
+        guest.name,
+        taskNumber,
+        tableNumber,
+      );
+      await refreshStats();
+      showToast(`Welcome back, ${firstName}! ♠`, "enter");
     }
   } catch (err) {
     console.error(err);
@@ -394,9 +529,8 @@ async function switchCamera() {
 }
 
 // ── Summary Modal ─────────────────────────────────────────────
-
-let summaryData = []; // cached results
-let summaryFilter = "all"; // "all" | "enter" | "exit"
+let summaryData = [];
+let summaryFilter = "all";
 let summarySearch = "";
 
 function fmtSummaryTime(ts) {
@@ -416,7 +550,8 @@ function renderSummaryList() {
       const q = summarySearch.toLowerCase();
       const nameMatch = (row.guest.name ?? "").toLowerCase().includes(q);
       const taskMatch = row.taskNumber && row.taskNumber.includes(q);
-      if (!nameMatch && !taskMatch) return false;
+      const tableMatch = row.tableNumber && row.tableNumber.includes(q);
+      if (!nameMatch && !taskMatch && !tableMatch) return false;
     }
     return true;
   });
@@ -435,11 +570,40 @@ function renderSummaryList() {
       const taskBadge = row.taskNumber
         ? `<span class="sum-row-task ${row.taskNumber === "00" ? "wildcard" : ""}">#${row.taskNumber}</span>`
         : `<span style="font-family:'DM Mono',monospace;font-size:9px;color:#3a2a5a;padding:0 4px;">—</span>`;
+      const tableBadge = row.tableNumber
+        ? `<span style="
+            font-family:'DM Mono',monospace;
+            font-size:9px;
+            background:rgba(80,160,255,0.1);
+            border:1px solid rgba(80,160,255,0.3);
+            color:#70b0ff;
+            border-radius:4px;
+            padding:2px 6px;
+            letter-spacing:1px;
+            flex-shrink:0;
+          ">T${row.tableNumber}</span>`
+        : "";
+      const sectionBadge = row.guest.section
+        ? `<span style="
+            font-family:'DM Mono',monospace;
+            font-size:9px;
+            background:rgba(100,60,160,0.12);
+            border:1px solid rgba(100,60,160,0.3);
+            color:#9a70c0;
+            border-radius:4px;
+            padding:2px 6px;
+            letter-spacing:1px;
+            flex-shrink:0;
+            white-space:nowrap;
+          ">${row.guest.section}</span>`
+        : "";
       return `
         <div class="sum-row ${isInside ? "inside" : "outside"}">
           <span style="font-size:14px;color:#4a2a7a;flex-shrink:0;">${rnd()}</span>
           <span class="sum-row-name">${row.guest.name ?? row.guest.docId}</span>
+          ${sectionBadge}
           ${taskBadge}
+          ${tableBadge}
           <span class="sum-row-badge ${isInside ? "inside" : "outside"}">${isInside ? "▶ IN" : "◀ OUT"}</span>
           <span class="sum-row-ts">${fmtSummaryTime(row.lastTimestamp)}</span>
         </div>`;
@@ -476,7 +640,6 @@ async function loadSummary() {
 function openSummaryModal() {
   summaryFilter = "all";
   summarySearch = "";
-  // Reset tab UI
   ["all", "enter", "exit"].forEach((f) => {
     document
       .getElementById(`sum-tab-${f}`)
@@ -514,7 +677,7 @@ export function initScanner() {
     .getElementById("switch-camera-btn")
     .addEventListener("click", switchCamera);
 
-  // ── Task assignment modal ─────────────────────────────────
+  // ── Task/table assignment modal ───────────────────────────
   document
     .getElementById("task-confirm-btn")
     .addEventListener("click", handleTaskConfirm);
@@ -522,16 +685,33 @@ export function initScanner() {
   document
     .getElementById("task-number-input")
     .addEventListener("keydown", (e) => {
+      if (e.key === "Enter")
+        document.getElementById("task-table-input").focus();
+    });
+
+  document
+    .getElementById("task-table-input")
+    .addEventListener("keydown", (e) => {
       if (e.key === "Enter") handleTaskConfirm();
     });
 
-  document.getElementById("task-skip-btn").addEventListener("click", () => {
-    if (!pendingTask) return;
-    const { guest, action, ts, cipherText } = pendingTask;
-    closeTaskModal();
-    openModal(guest, action, ts, cipherText, guest.name, null);
-    scanning = true;
-  });
+  document
+    .getElementById("task-skip-btn")
+    .addEventListener("click", async () => {
+      if (!pendingTask) return;
+      const { guest, action, ts, cipherText } = pendingTask;
+
+      // Log the entry even when skipping assignment
+      try {
+        await logAccess(guest.docId, action);
+        appendLog(guest, action, new Date(), null, null);
+        await refreshStats();
+      } catch (_) {}
+
+      closeTaskModal();
+      openModal(guest, action, ts, cipherText, guest.name, null, null);
+      scanning = true;
+    });
 
   // ── Reset modal ───────────────────────────────────────────
   document
@@ -558,7 +738,7 @@ export function initScanner() {
       if (e.key === "Enter") handleResetConfirm();
     });
 
-  // ── Summary modal ─────────────────────────────────────────────
+  // ── Summary modal ─────────────────────────────────────────
   document
     .getElementById("summary-btn")
     .addEventListener("click", openSummaryModal);
@@ -589,6 +769,20 @@ export function initScanner() {
     renderSummaryList();
   });
 
+  // ── Refresh cache button (optional, shown in header) ──────
+  const cacheBtn = document.getElementById("refresh-cache-btn");
+  if (cacheBtn) {
+    cacheBtn.addEventListener("click", async () => {
+      showToast("Refreshing guest data…", "info");
+      try {
+        await refreshGuestCache();
+        showToast("Guest data updated ♠", "enter");
+      } catch {
+        showToast("Could not refresh — check connection", "error");
+      }
+    });
+  }
+
   // ── QR Scanner ────────────────────────────────────────────
   const tryStart = () => {
     if (typeof Html5Qrcode === "undefined") {
@@ -602,8 +796,6 @@ export function initScanner() {
         if (!cameras?.length) return;
         availableCameras = cameras;
 
-        // Prefer the main rear camera — on phones the wide angle is usually index 0,
-        // and the standard/main camera matches "back" or comes second.
         const rearCams = cameras.filter((c) =>
           /back|rear|environment/i.test(c.label),
         );

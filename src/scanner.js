@@ -22,7 +22,6 @@ import {
   assignTaskAndTable,
   resetAll,
   getSummary,
-  refreshGuestCache,
 } from "./firebase.js";
 
 // ── State ─────────────────────────────────────────────────────

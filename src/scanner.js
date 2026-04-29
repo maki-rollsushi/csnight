@@ -1,16 +1,3 @@
-// ============================================================
-//  scanner.js  –  QR scanning + Firestore lookup + modal + log
-//
-//  Changes from v1:
-//  - Guest data is served from localStorage cache (firebase.js)
-//    so lookups are instant on slow connections.
-//  - Task assignment modal now also collects a TABLE NUMBER.
-//  - Scanning a guest who is already INSIDE no longer auto-logs
-//    an exit. Instead, the guest modal shows a "CONFIRM EXIT"
-//    button. The scanner re-arms immediately so other guests
-//    can be scanned while the modal is open.
-// ============================================================
-
 import {
   fetchGuestByCipher,
   fetchGuestById,
@@ -38,6 +25,8 @@ let pendingTask = null;
 
 // Holds guest data for the exit-confirmation flow
 let pendingExit = null;
+// Holds guest data for entry confirmation flow
+let pendingEntry = null;
 
 // ── Helpers ───────────────────────────────────────────────────
 function randomSuit() {
@@ -168,12 +157,23 @@ function openModal(
   const actionArea = document.getElementById("modal-action");
 
   if (action === "enter") {
-    // Entering — show simple badge
-    badge.textContent = "▶ ENTERING";
-    badge.className = "action-badge enter";
-    badge.style.cursor = "default";
-    badge.onclick = null;
-    actionArea.innerHTML = `<div class="action-badge enter" id="action-badge">▶ ENTERING</div>`;
+    actionArea.innerHTML = `
+    <button id="confirm-entry-btn" class="action-badge enter" style="
+      cursor:pointer;
+      border:none;
+      width:100%;
+      font-family:'Cinzel',serif;
+      font-size:15px;
+      letter-spacing:4px;
+      padding:13px 40px;
+    ">▶ CONFIRM ENTRY</button>
+  `;
+
+    document
+      .getElementById("confirm-entry-btn")
+      .addEventListener("click", async () => {
+        await commitEntry();
+      });
   } else if (action === "exit") {
     // Exiting — show confirm button
     actionArea.innerHTML = `
@@ -198,14 +198,42 @@ function openModal(
     actionArea.innerHTML = `<div class="action-badge ${isInside ? "enter" : "exit"}" id="action-badge">${isInside ? "▶ INSIDE" : "◀ OUTSIDE"}</div>`;
   }
 
-  // Store pending exit info so the confirm button can use it
+  // Store pending exit/entry info so the confirm buttons can use it
   if (action === "exit") {
     pendingExit = { guest, ts, cipherText, taskNumber, tableNumber };
+    pendingEntry = null;
+  } else if (action === "enter") {
+    pendingEntry = { guest, ts, cipherText, taskNumber, tableNumber };
+    pendingExit = null;
   } else {
     pendingExit = null;
+    pendingEntry = null;
   }
 
   document.getElementById("modal-overlay").classList.add("active");
+}
+
+async function commitEntry() {
+  if (!pendingEntry) return;
+
+  const { guest, ts, taskNumber, tableNumber } = pendingEntry;
+  pendingEntry = null;
+
+  try {
+    await logAccess(guest.docId, "enter");
+    totalScans++;
+    appendLog(guest, "enter", new Date(), taskNumber, tableNumber);
+
+    const firstName =
+      (guest.name ?? "").split(",")[1]?.trim().split(" ")[0] ?? guest.name;
+
+    showToast(`Welcome, ${firstName}! ♠`, "enter");
+    await refreshStats();
+  } catch (err) {
+    showToast("Entry error: " + (err.message ?? "Unknown"), "error");
+  }
+
+  closeModal();
 }
 
 async function commitExit() {
@@ -232,6 +260,7 @@ async function commitExit() {
 function closeModal() {
   document.getElementById("modal-overlay").classList.remove("active");
   pendingExit = null;
+  pendingEntry = null;
   setTimeout(() => {
     scanning = true;
   }, 600);
@@ -337,11 +366,8 @@ async function handleTaskConfirm() {
     const { guest, action, ts, cipherText } = pendingTask;
     closeTaskModal();
 
-    // Log the entry now that assignment is done
-    await logAccess(guest.docId, action);
-    totalScans++;
-    appendLog(guest, action, new Date(), taskNumber, tableNumber);
-
+    // ── NOTE: Removed the auto-logging from here ──
+    // Just open the main modal to ask for "CONFIRM ENTRY"
     openModal(
       guest,
       action,
@@ -351,14 +377,6 @@ async function handleTaskConfirm() {
       taskNumber,
       tableNumber,
     );
-
-    const firstName =
-      (guest.name ?? "").split(",")[1]?.trim().split(" ")[0] ?? guest.name;
-    showToast(
-      `Task #${taskNumber}${tableNumber ? ` · Table ${tableNumber}` : ""} → ${firstName} ♠`,
-      "enter",
-    );
-    await refreshStats();
   } catch (err) {
     showErr("Error: " + (err.message ?? "Unknown error"));
   } finally {
@@ -464,13 +482,11 @@ async function handleScan(rawValue) {
     if (action === "enter" && !taskNumber) {
       // ── First entry: assign task + table first ─────────────
       showToast(`Welcome, ${firstName}! Assign task # ♠`, "enter");
-      totalScans++;
       await refreshStats();
       await openTaskModal(guest, action, new Date(), cipherText);
       // Scanner re-arms after task modal is closed (closeTaskModal / skip)
     } else if (action === "exit") {
       // ── Exit: show modal with a confirm button ─────────────
-      // Do NOT log yet — wait for the operator to press "CONFIRM EXIT"
       showToast(`Tap CONFIRM EXIT for ${firstName} ♦`, "exit");
       scanning = true; // re-arm so other guests can be scanned
       openModal(
@@ -483,10 +499,7 @@ async function handleScan(rawValue) {
         tableNumber,
       );
     } else {
-      // ── Re-entry (already has task): log immediately and show modal ──
-      await logAccess(guest.docId, action);
-      totalScans++;
-      appendLog(guest, action, new Date(), taskNumber, tableNumber);
+      // ── Re-entry (already has task): show modal with a confirm button ──
       scanning = true; // re-arm before opening modal so other scans work
       openModal(
         guest,
@@ -497,8 +510,6 @@ async function handleScan(rawValue) {
         taskNumber,
         tableNumber,
       );
-      await refreshStats();
-      showToast(`Welcome back, ${firstName}! ♠`, "enter");
     }
   } catch (err) {
     console.error(err);
@@ -605,11 +616,6 @@ function renderSummaryList() {
             white-space:nowrap;
           ">${row.guest.section}</span>`
         : "";
-      const guestJson = JSON.stringify(row.guest)
-        .replace(/'/g, "&#39;")
-        .replace(/"/g, "&quot;");
-      const taskJson = row.taskNumber ? row.taskNumber : "";
-      const tableJson = row.tableNumber ? row.tableNumber : "";
       return `
         <div class="sum-row ${isInside ? "inside" : "outside"}"
           style="cursor:pointer;"
@@ -738,13 +744,7 @@ export function initScanner() {
       if (!pendingTask) return;
       const { guest, action, ts, cipherText } = pendingTask;
 
-      // Log the entry even when skipping assignment
-      try {
-        await logAccess(guest.docId, action);
-        appendLog(guest, action, new Date(), null, null);
-        await refreshStats();
-      } catch (_) {}
-
+      // NOTE: Removed auto-logging from here too. Just passes it to the main modal
       closeTaskModal();
       openModal(guest, action, ts, cipherText, guest.name, null, null);
       scanning = true;

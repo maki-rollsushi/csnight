@@ -7,6 +7,8 @@
 //  fetchGuestByCipher() and fetchGuestById() are now instant —
 //  no network call, no cache, no latency.
 //
+//  Each guest now includes a pre-assigned tableNumber from the seat plan.
+//
 //  Firestore is still used ONLY for:
 //    • access_log        (enter / exit events)
 //    • task_assignments  (task + table numbers)
@@ -55,6 +57,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 4B",
+    tableNumber: "3",
   },
   {
     docId: "0002",
@@ -63,6 +66,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "3",
   },
   {
     docId: "0003",
@@ -71,6 +75,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "10",
   },
   {
     docId: "0004",
@@ -79,6 +84,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "9",
   },
   {
     docId: "0005",
@@ -87,6 +93,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 2A",
+    tableNumber: "JACK",
   },
   {
     docId: "0006",
@@ -95,6 +102,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 1C",
+    tableNumber: "KING",
   },
   {
     docId: "0007",
@@ -103,6 +111,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "QUEEN",
   },
   {
     docId: "0008",
@@ -111,6 +120,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "QUEEN",
   },
   {
     docId: "0009",
@@ -119,6 +129,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "4",
   },
   {
     docId: "0010",
@@ -127,6 +138,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 4C",
+    tableNumber: "QUEEN",
   },
   {
     docId: "0011",
@@ -135,6 +147,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "3",
   },
   {
     docId: "0012",
@@ -143,6 +156,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "KING",
   },
   {
     docId: "0013",
@@ -151,6 +165,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "9",
   },
   {
     docId: "0014",
@@ -159,6 +174,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "10",
   },
   {
     docId: "0015",
@@ -183,6 +199,7 @@ const GUEST_LIST = [
     paymentStatus: "Partial Installment – Pending Completion",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "7",
   },
   {
     docId: "0018",
@@ -191,6 +208,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "9",
   },
   {
     docId: "0019",
@@ -199,6 +217,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 4C",
+    tableNumber: "3",
   },
   {
     docId: "0020",
@@ -207,6 +226,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 1A",
+    tableNumber: "6",
   },
   {
     docId: "0021",
@@ -215,6 +235,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "ACE",
   },
   {
     docId: "0022",
@@ -223,6 +244,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 2B",
+    tableNumber: "JACK",
   },
   {
     docId: "0023",
@@ -231,6 +253,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 1C",
+    tableNumber: "KING",
   },
   {
     docId: "0024",
@@ -239,6 +262,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Pending Completion",
     dietaryRestrictions: "None",
     section: "BSCS 1A",
+    tableNumber: "6",
   },
   {
     docId: "0025",
@@ -247,6 +271,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Vegetarian / Vegan, Peanut / Nut Allergy",
     section: "BSCS 1A",
+    tableNumber: "6",
   },
   {
     docId: "0026",
@@ -255,6 +280,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "No Pork (Religious/Personal)",
     section: "BSCS 4B",
+    tableNumber: "10",
   },
   {
     docId: "0027",
@@ -263,6 +289,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "4",
   },
   {
     docId: "0028",
@@ -271,6 +298,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "QUEEN",
   },
   {
     docId: "0029",
@@ -279,6 +307,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "5",
   },
   {
     docId: "0030",
@@ -287,6 +316,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "5",
   },
   {
     docId: "0031",
@@ -295,6 +325,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 1C",
+    tableNumber: "KING",
   },
   {
     docId: "0032",
@@ -303,6 +334,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "9",
   },
   {
     docId: "0033",
@@ -311,6 +343,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "10",
   },
   {
     docId: "0034",
@@ -319,6 +352,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 2B",
+    tableNumber: "JACK",
   },
   {
     docId: "0035",
@@ -327,6 +361,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "7",
   },
   {
     docId: "0036",
@@ -335,6 +370,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 2B",
+    tableNumber: "JACK",
   },
   {
     docId: "0037",
@@ -343,6 +379,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 1A",
+    tableNumber: "6",
   },
   {
     docId: "0038",
@@ -351,6 +388,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "ACE",
   },
   {
     docId: "0039",
@@ -359,6 +397,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "2",
   },
   {
     docId: "0040",
@@ -367,6 +406,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Shellfish",
     section: "BSCS 4B",
+    tableNumber: "10",
   },
   {
     docId: "0041",
@@ -375,6 +415,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "10",
   },
   {
     docId: "0042",
@@ -383,6 +424,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "5",
   },
   {
     docId: "0043",
@@ -391,6 +433,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "No Beef",
     section: "BSCS 4A",
+    tableNumber: "KING",
   },
   {
     docId: "0044",
@@ -399,6 +442,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "10",
   },
   {
     docId: "0045",
@@ -407,6 +451,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "10",
   },
   {
     docId: "0046",
@@ -415,6 +460,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "2",
   },
   {
     docId: "0047",
@@ -423,6 +469,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "5",
   },
   {
     docId: "0048",
@@ -431,6 +478,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "9",
   },
   {
     docId: "0049",
@@ -439,6 +487,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "3",
   },
   {
     docId: "0050",
@@ -447,6 +496,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "7",
   },
   {
     docId: "0051",
@@ -455,6 +505,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "No Pork (Religious/Personal)",
     section: "BSCS 4B",
+    tableNumber: "9",
   },
   {
     docId: "0052",
@@ -463,6 +514,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "9",
   },
   {
     docId: "0053",
@@ -471,6 +523,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 4A",
+    tableNumber: "4",
   },
   {
     docId: "0054",
@@ -479,6 +532,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "7",
   },
   {
     docId: "0055",
@@ -487,6 +541,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "2",
   },
   {
     docId: "0056",
@@ -495,6 +550,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "7",
   },
   {
     docId: "0057",
@@ -503,6 +559,7 @@ const GUEST_LIST = [
     paymentStatus: "Partial Installment – Pending Completion",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "7",
   },
   {
     docId: "0058",
@@ -511,6 +568,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "3",
   },
   {
     docId: "0059",
@@ -519,6 +577,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "4",
   },
   {
     docId: "0060",
@@ -527,6 +586,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "9",
   },
   {
     docId: "0061",
@@ -535,6 +595,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "10",
   },
   {
     docId: "0062",
@@ -543,6 +604,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 4A",
+    tableNumber: "4",
   },
   {
     docId: "0063",
@@ -551,6 +613,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "JACK",
   },
   {
     docId: "0064",
@@ -559,6 +622,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "2",
   },
   {
     docId: "0065",
@@ -567,6 +631,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "No Chicken, Seafood Allergy",
     section: "BSCS 4C",
+    tableNumber: "2",
   },
   {
     docId: "0066",
@@ -575,6 +640,7 @@ const GUEST_LIST = [
     paymentStatus: "Partial Installment – Pending Completion",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "7",
   },
   {
     docId: "0067",
@@ -583,6 +649,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "5",
   },
   {
     docId: "0068",
@@ -591,6 +658,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "2",
   },
   {
     docId: "0069",
@@ -599,6 +667,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "JACK",
   },
   {
     docId: "0070",
@@ -607,6 +676,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "QUEEN",
   },
   {
     docId: "0071",
@@ -615,6 +685,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 4A",
+    tableNumber: "KING",
   },
   {
     docId: "0072",
@@ -623,6 +694,7 @@ const GUEST_LIST = [
     paymentStatus: "Partial Installment – Pending Completion",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "7",
   },
   {
     docId: "0073",
@@ -631,6 +703,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 2A",
+    tableNumber: "JACK",
   },
   {
     docId: "0074",
@@ -639,6 +712,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "5",
   },
   {
     docId: "0075",
@@ -647,6 +721,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 2A",
+    tableNumber: "ACE",
   },
   {
     docId: "0076",
@@ -655,6 +730,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "5",
   },
   {
     docId: "0077",
@@ -663,6 +739,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 1A",
+    tableNumber: "6",
   },
   {
     docId: "0078",
@@ -671,6 +748,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 2B",
+    tableNumber: "JACK",
   },
   {
     docId: "0079",
@@ -679,6 +757,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "10",
   },
   {
     docId: "0080",
@@ -687,6 +766,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "2",
   },
   {
     docId: "0081",
@@ -695,6 +775,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 1A",
+    tableNumber: "6",
   },
   {
     docId: "0082",
@@ -703,6 +784,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Shrimp Allergy",
     section: "BSCS 3A",
+    tableNumber: "5",
   },
   {
     docId: "0083",
@@ -719,6 +801,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "No Chicken",
     section: "BSCS 4A",
+    tableNumber: "4",
   },
   {
     docId: "0085",
@@ -727,6 +810,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "JACK",
   },
   {
     docId: "0086",
@@ -735,6 +819,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "KING",
   },
   {
     docId: "0087",
@@ -743,6 +828,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "JACK",
   },
   {
     docId: "0088",
@@ -751,6 +837,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "2",
   },
   {
     docId: "0089",
@@ -759,6 +846,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4B",
+    tableNumber: "4",
   },
   {
     docId: "0090",
@@ -767,6 +855,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 4C",
+    tableNumber: "9",
   },
   {
     docId: "0091",
@@ -775,6 +864,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "ACE",
   },
   {
     docId: "0092",
@@ -783,6 +873,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "KING",
   },
   {
     docId: "0093",
@@ -799,6 +890,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "2",
   },
   {
     docId: "0095",
@@ -807,6 +899,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 1C",
+    tableNumber: "KING",
   },
   {
     docId: "0096",
@@ -815,6 +908,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "QUEEN",
   },
   {
     docId: "0097",
@@ -823,6 +917,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 1A",
+    tableNumber: "6",
   },
   {
     docId: "0098",
@@ -831,6 +926,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "2",
   },
   {
     docId: "0099",
@@ -839,6 +935,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "QUEEN",
   },
   {
     docId: "0100",
@@ -847,6 +944,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "ACE",
   },
   {
     docId: "0101",
@@ -855,6 +953,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "Seafood Allergy",
     section: "BSCS 4C",
+    tableNumber: "QUEEN",
   },
   {
     docId: "0102",
@@ -863,6 +962,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "3",
   },
   {
     docId: "0103",
@@ -871,6 +971,7 @@ const GUEST_LIST = [
     paymentStatus: "Installment – Completed",
     dietaryRestrictions: "None",
     section: "BSCS 4A",
+    tableNumber: "4",
   },
   {
     docId: "0104",
@@ -879,6 +980,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "9",
   },
   {
     docId: "0105",
@@ -887,6 +989,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "No Chicken",
     section: "BSCS 4A",
+    tableNumber: "4",
   },
   {
     docId: "0106",
@@ -895,6 +998,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 4C",
+    tableNumber: "ACE",
   },
   {
     docId: "0107",
@@ -903,6 +1007,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "No Chicken",
     section: "BSCS 4C",
+    tableNumber: "ACE",
   },
   {
     docId: "0108",
@@ -911,6 +1016,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 1A",
+    tableNumber: "ACE",
   },
   {
     docId: "0109",
@@ -919,6 +1025,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "ACE",
   },
   {
     docId: "0110",
@@ -927,6 +1034,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 2A",
+    tableNumber: "ACE",
   },
   {
     docId: "0111",
@@ -935,6 +1043,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "JOKER",
   },
   {
     docId: "0112",
@@ -943,6 +1052,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "JOKER",
   },
   {
     docId: "0113",
@@ -951,6 +1061,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "JOKER",
   },
   {
     docId: "0114",
@@ -959,6 +1070,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "JOKER",
   },
   {
     docId: "0115",
@@ -967,6 +1079,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "JOKER",
   },
   {
     docId: "0116",
@@ -975,6 +1088,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "JOKER",
   },
   {
     docId: "0117",
@@ -983,6 +1097,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "JOKER",
   },
   {
     docId: "0118",
@@ -991,6 +1106,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "JOKER",
   },
   {
     docId: "0119",
@@ -999,6 +1115,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "JOKER",
   },
   {
     docId: "0120",
@@ -1007,6 +1124,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "8",
   },
   {
     docId: "0121",
@@ -1015,6 +1133,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "Faculty",
+    tableNumber: "8",
   },
   {
     docId: "0122",
@@ -1023,6 +1142,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 3B",
+    tableNumber: "5",
   },
   {
     docId: "0123",
@@ -1031,6 +1151,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 3A",
+    tableNumber: "8",
   },
   {
     docId: "0124",
@@ -1039,6 +1160,7 @@ const GUEST_LIST = [
     paymentStatus: "Full Payment",
     dietaryRestrictions: "None",
     section: "BSCS 1A",
+    tableNumber: "6",
   },
 ];
 
@@ -1108,12 +1230,15 @@ export async function countInside() {
  * }
  */
 
-/** Get a guest's task + table assignment. Returns nulls if none assigned yet. */
+/** Get a guest's task + table assignment. tableNumber comes from GUEST_LIST (seat plan). */
 export async function getAssignment(guestDocId) {
-  const ref = doc(db, "task_assignments", String(guestDocId));
+  const padded = String(guestDocId).padStart(4, "0");
+  const guest = BY_DOCID.get(padded);
+  const tableNumber = guest?.tableNumber ?? null;
+  const ref = doc(db, "task_assignments", padded);
   const snap = await getDoc(ref);
-  if (!snap.exists()) return { taskNumber: null, tableNumber: null };
-  const { taskNumber = null, tableNumber = null } = snap.data();
+  if (!snap.exists()) return { taskNumber: null, tableNumber };
+  const { taskNumber = null } = snap.data();
   return { taskNumber, tableNumber };
 }
 
@@ -1123,11 +1248,10 @@ export async function getTakenTaskNumbers() {
   return snap.docs.map((d) => d.data().taskNumber).filter(Boolean);
 }
 
-/** Write task number + optional table number for a guest. */
-export async function assignTaskAndTable(guestDocId, taskNumber, tableNumber) {
+/** Write task number for a guest. tableNumber is baked into GUEST_LIST (seat plan). */
+export async function assignTaskAndTable(guestDocId, taskNumber) {
   await setDoc(doc(db, "task_assignments", String(guestDocId)), {
     taskNumber: String(taskNumber),
-    tableNumber: tableNumber ? String(tableNumber) : null,
     timestamp: serverTimestamp(),
   });
 }
@@ -1170,7 +1294,7 @@ export async function getSummary() {
       },
       status: action,
       taskNumber: assignMap[guestId]?.taskNumber ?? null,
-      tableNumber: assignMap[guestId]?.tableNumber ?? null,
+      tableNumber: BY_DOCID.get(guestId)?.tableNumber ?? null,
       lastTimestamp: timestamp,
     }),
   );

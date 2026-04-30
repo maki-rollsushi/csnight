@@ -272,7 +272,6 @@ async function openTaskModal(guest, action, ts, cipherText) {
 
   document.getElementById("task-guest-name").textContent = guest.name;
   document.getElementById("task-number-input").value = "";
-  document.getElementById("task-table-input").value = "";
   document.getElementById("task-error").style.display = "none";
 
   // Load and display availability
@@ -302,7 +301,6 @@ async function handleTaskConfirm() {
   if (!pendingTask) return;
 
   const rawTask = document.getElementById("task-number-input").value.trim();
-  const rawTable = document.getElementById("task-table-input").value.trim();
   const errorEl = document.getElementById("task-error");
 
   const showErr = (msg) => {
@@ -328,16 +326,8 @@ async function handleTaskConfirm() {
     taskNumber = String(num);
   }
 
-  // ── Validate table number (optional but must be positive int if given) ──
-  let tableNumber = null;
-  if (rawTable) {
-    const tNum = parseInt(rawTable, 10);
-    if (isNaN(tNum) || tNum < 1 || String(tNum) !== rawTable) {
-      showErr("Table number must be a positive whole number (or leave blank).");
-      return;
-    }
-    tableNumber = String(tNum);
-  }
+  // ── Table number comes from the pre-assigned seat plan ─────
+  const tableNumber = pendingTask.guest.tableNumber ?? null;
 
   // ── Check task availability ────────────────────────────────
   errorEl.style.display = "none";
@@ -361,7 +351,7 @@ async function handleTaskConfirm() {
     }
 
     // ── Assign ────────────────────────────────────────────
-    await assignTaskAndTable(pendingTask.guest.docId, taskNumber, tableNumber);
+    await assignTaskAndTable(pendingTask.guest.docId, taskNumber);
 
     const { guest, action, ts, cipherText } = pendingTask;
     closeTaskModal();
@@ -727,13 +717,6 @@ export function initScanner() {
 
   document
     .getElementById("task-number-input")
-    .addEventListener("keydown", (e) => {
-      if (e.key === "Enter")
-        document.getElementById("task-table-input").focus();
-    });
-
-  document
-    .getElementById("task-table-input")
     .addEventListener("keydown", (e) => {
       if (e.key === "Enter") handleTaskConfirm();
     });

@@ -221,9 +221,10 @@ export function renderApp() {
             line-height:1.5;
           ">
             Enter a task number <strong style="color:#c9a84c;">1 – 107</strong> for this guest,<br>
-            or <strong style="color:#c9a84c;">00</strong> for a wildcard slot.
+            or <strong style="color:#c9a84c;">00</strong> for a wildcard slot.<br>
+            <span style="color:#4a8a60;font-size:10px;">Table is pre-assigned from the seat plan.</span>
           </p>
-          <div class="manual-row" style="gap:10px;margin-bottom:10px;">
+          <div class="manual-row" style="gap:10px;margin-bottom:14px;">
             <input
               type="text"
               id="task-number-input"
@@ -234,21 +235,12 @@ export function renderApp() {
               style="font-size:1.1rem;letter-spacing:3px;text-align:center;"
             />
           </div>
-          <div class="manual-row" style="gap:10px;">
-            <input
-              type="text"
-              id="task-table-input"
-              class="manual-input"
-              placeholder="Table # (optional)"
-              autocomplete="off"
-              inputmode="numeric"
-              style="font-size:1.1rem;letter-spacing:3px;text-align:center;border-color:#1a3a5a;"
-            />
+          <div class="manual-row" style="gap:10px;justify-content:center;">
             <button id="task-confirm-btn" class="btn-manual" style="
               background:linear-gradient(135deg,#1a4a00,#2a6a00);
               border-color:#3a7a20;
               color:#c8fce0;
-              min-width:80px;
+              min-width:120px;
             ">ASSIGN</button>
           </div>
           <p id="task-error" style="
